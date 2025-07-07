@@ -3,16 +3,7 @@ import csv
 import geopandas as gpd
 
 # Extract waydal locations and corresponding image ids
-def retrieve_locations():
-
-    parser = argparse.ArgumentParser(prog='Create waydal coordinates CSV')
-    parser.add_argument('--shp_file', type=str, required=True, help="Path to .shp file")
-    parser.add_argument('--csv_file', type=str, required=True, help="Path to .csv file")
-
-    args = parser.parse_args()
-
-    shp_file = args.shp_file
-    csv_file = args.csv_file
+def retrieve_locations(shp_file, csv_file):
 
     # Extract the polygon coordinates and image ids corresponding to the monuments
     gdf = gpd.read_file(shp_file)
@@ -41,4 +32,12 @@ def retrieve_locations():
     return
 
 if __name__=="__main__":
-    retrieve_locations()
+    parser = argparse.ArgumentParser(prog='Create waydal coordinates CSV')
+    parser.add_argument('--shp_file', type=str, required=True, help="Path to .shp file")
+    parser.add_argument('--csv_file', type=str, required=True, help="Path to .csv file")
+
+    args = parser.parse_args()
+
+    shp_file = args.shp_file
+    csv_file = args.csv_file
+    retrieve_locations(shp_file, csv_file)

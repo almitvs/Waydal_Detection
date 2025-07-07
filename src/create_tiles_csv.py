@@ -190,7 +190,7 @@ def partition_tiles(csv_file, images, image_dim, tile_dim, coord_displacement, t
 
 if __name__=="__main__":
 
-    parser = argparse.ArgumentParser(prog='Create waydal coordinates CSV')
+    parser = argparse.ArgumentParser(prog='Create tile coordinates CSV')
     parser.add_argument('--shp_file', type=str, required=True, help="Path to .shp file")
     parser.add_argument('--csv_file', type=str, required=True, help="Path to .csv file")
     parser.add_argument('--img_folder', type=str, required=True, help="Path to image folder")

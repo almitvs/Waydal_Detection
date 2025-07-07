@@ -1,20 +1,18 @@
 import csv
 import random as rand
 import matplotlib.pyplot as plt
+import numpy as np
+import PIL
+from PIL import Image
+from sklearn.model_selection import train_test_split
 
 # Read the information from CSVs and sample negative tiles
-def read_CSVs(waydals_csv, tiles_csv, proportion):
+def read_CSVs(tiles_csv, proportion):
 
     # Store the information
     locations = []
     pos_tiles = []
     neg_tiles = []
-
-    # Get the waydal locations
-    with open(waydals_csv, newline='') as csvfile:
-        reader = csv.reader(csvfile)
-        for row in reader:
-            locations.append(row)
 
     # Get the tile information
     with open(tiles_csv, newline='') as csvfile:
@@ -29,7 +27,7 @@ def read_CSVs(waydals_csv, tiles_csv, proportion):
     amount = proportion * len(pos_tiles)
     neg_samples = rand.sample(neg_tiles, amount)
 
-    return locations, pos_tiles, neg_samples
+    return pos_tiles, neg_samples
 
 # Get the pixel values for the tiles
 def create_tiles(pos_tiles, neg_tiles):
@@ -89,5 +87,19 @@ def visualize_tile(tile_image):
     plt.show()
     return
 
-def sample_tiles():
-    return
+# Split the images into train, validation, and test
+def split_data(pos_tile_images, neg_tile_images, pos_tile_indices, neg_tile_indices, test_size, seed):
+    train_pos_tiles, temp_pos_tiles, train_pos_indices, temp_pos_indices = train_test_split(pos_tile_images, pos_tile_indices, test_size=test_size, random_state=seed)
+    valid_pos_tiles, test_pos_tiles, valid_pos_indices, test_pos_indices = train_test_split(temp_pos_tiles, temp_pos_indices, test_size=0.5, random_state=seed)
+    train_neg_tiles, temp_neg_tiles, train_neg_indices, temp_neg_indices = train_test_split(neg_tile_images, neg_tile_indices, test_size=test_size, random_state=seed)
+    valid_neg_tiles, test_neg_tiles, valid_neg_indices, test_neg_indices = train_test_split(temp_neg_tiles, temp_neg_indices, test_size=0.5, random_state=seed)
+    return train_pos_tiles, valid_pos_tiles, test_pos_tiles, train_neg_tiles, valid_neg_tiles, test_neg_tiles, train_pos_indices, valid_pos_indices, test_pos_indices, train_neg_indices, valid_neg_indices, test_neg_indices
+
+def sample_tiles(tiles_csv, proportion, seed):
+
+    pos_tiles, neg_tiles = read_CSVs(tiles_csv, proportion)
+    pos_tile_images, neg_tile_images, pos_tile_indices, neg_tile_indices = create_tiles(pos_tiles, neg_tiles)
+    test_size = 6 * proportion
+    train_pos_tiles, valid_pos_tiles, test_pos_tiles, train_neg_tiles, valid_neg_tiles, test_neg_tiles, train_pos_indices, valid_pos_indices, test_pos_indices, train_neg_indices, valid_neg_indices, test_neg_indices = split_data(pos_tile_images, neg_tile_images, pos_tile_indices, neg_tile_indices, test_size, seed)
+
+    return train_pos_tiles, valid_pos_tiles, test_pos_tiles, train_neg_tiles, valid_neg_tiles, test_neg_tiles, train_pos_indices, valid_pos_indices, test_pos_indices, train_neg_indices, valid_neg_indices, test_neg_indices

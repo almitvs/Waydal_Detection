@@ -1,3 +1,4 @@
+import argparse
 import geopandas as gpd
 from PIL import Image
 import numpy as np
@@ -17,14 +18,6 @@ from sklearn.metrics import confusion_matrix as CM
 import simplekml
 from sample_tiles import visualize_tile
 from sample_tiles import sample_tiles
-
-# Split the images into train, validation, and test
-def split_data(pos_tile_images, neg_tile_images, pos_tile_indices, neg_tile_indices, test_size, seed):
-    train_pos_tiles, temp_pos_tiles, train_pos_indices, temp_pos_indices = train_test_split(pos_tile_images, pos_tile_indices, test_size=test_size, random_state=seed)
-    valid_pos_tiles, test_pos_tiles, valid_pos_indices, test_pos_indices = train_test_split(temp_pos_tiles, temp_pos_indices, test_size=0.5, random_state=seed)
-    train_neg_tiles, temp_neg_tiles, train_neg_indices, temp_neg_indices = train_test_split(neg_tile_images, neg_tile_indices, test_size=test_size, random_state=seed)
-    valid_neg_tiles, test_neg_tiles, valid_neg_indices, test_neg_indices = train_test_split(temp_neg_tiles, temp_neg_indices, test_size=0.5, random_state=seed)
-    return train_pos_tiles, valid_pos_tiles, test_pos_tiles, train_neg_tiles, valid_neg_tiles, test_neg_tiles, train_pos_indices, valid_pos_indices, test_pos_indices, train_neg_indices, valid_neg_indices, test_neg_indices
 
 # Structure to handle the dataset
 class TileDataset(Dataset):
@@ -268,4 +261,83 @@ def create_KML_and_Shapefile(KML_file, shape_file, tile_values, pos_tiles, neg_t
     return
 
 if __name__=="__main__":
-    retrieve_locations()
+
+    parser = argparse.ArgumentParser(prog='Train ResNet')
+    parser.add_argument('--csv_file', type=str, required=True, help="Path to .csv file")
+    parser.add_argument('--proportion', type=int, required=True, help="num_neg_tiles = proportion * (num_pos_tiles * num_augmentations)")
+    parser.add_argument('--seed', type=int, required=True, help="Random seed")
+
+    parser.add_argument('--learning_rate', type=float, required=True, help="Learning rate")
+    parser.add_argument('--batch_size', type=int, required=True, help="Batch size")
+    parser.add_argument('--num_epochs', type=int, required=True, help="Number of epochs")
+
+    args = parser.parse_args()
+
+    csv_file = args.csv_file
+    proportion = args.proportion
+    seed = args.seed
+    learning_rate = args.learning_rate
+    batch_size = args.batch_size
+    num_epochs = args.num_epochs
+
+    train_pos_tiles, valid_pos_tiles, test_pos_tiles, train_neg_tiles, valid_neg_tiles, test_neg_tiles, train_pos_indices, valid_pos_indices, test_pos_indices, train_neg_indices, valid_neg_indices, test_neg_indices = sample_tiles(csv_file, proportion, seed)
+
+    pos_transformations = [
+        transforms.RandomHorizontalFlip(),
+        transforms.RandomVerticalFlip(),
+        transforms.RandomRotation([90, 90]),
+        transforms.RandomRotation([180, 180]),
+        transforms.RandomRotation([270, 270]),
+        #transforms.Normalize(mean=mean, std=std),
+        #transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+    ]
+
+    neg_transformations = [
+        #transforms.Normalize(mean=mean, std=std),
+        #transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+    ]
+
+    train_set = TileDataset(train_pos_tiles, train_neg_tiles, train_pos_indices, train_neg_indices, pos_transformations)
+    valid_set = TileDataset(valid_pos_tiles, valid_neg_tiles, valid_pos_indices, valid_neg_indices)
+    test_set = TileDataset(test_pos_tiles, test_neg_tiles, test_pos_indices, test_neg_indices)
+
+    train_dataloader = DataLoader(train_set, batch_size=batch_size, shuffle=True)
+    valid_dataloader = DataLoader(valid_set, batch_size=batch_size, shuffle=False)
+    test_dataloader = DataLoader(test_set, batch_size=batch_size, shuffle=False)
+
+    device = set_device()
+    print(device)
+
+    model = torchvision.models.resnet101(pretrained=True)
+    for param in model.parameters():
+        param.requires_grad = False
+    model.fc = nn.Linear(model.fc.in_features, 1)
+    for param in model.fc.parameters():
+        param.requires_grad = True
+
+    criterion = nn.BCEWithLogitsLoss()
+    optimizer = torch.optim.Adam(model.fc.parameters(), lr=learning_rate)
+
+    model = train_model(device, model, criterion, optimizer, num_epochs, train_dataloader, valid_dataloader)
+
+    train_set = TileDataset(train_pos_tiles, train_neg_tiles, train_pos_indices, train_neg_indices) # Remove data augmentation from the training set
+    train_dataloader = DataLoader(train_set, batch_size=batch_size, shuffle=False)
+    train_results, valid_results, test_results, total_results, tile_values = test_model(device, model, criterion, optimizer, batch_size, num_epochs, train_dataloader, valid_dataloader, test_dataloader)
+    print(f"Training       Loss: {train_results[0]:.3f}     TP: {train_results[1]}     FN: {train_results[2]}     TN: {train_results[3]}     FP: {train_results[4]}")
+    print(f"Validation     Loss: {valid_results[0]:.3f}     TP: {valid_results[1]}      FN: {valid_results[2]}      TN: {valid_results[3]}      FP: {valid_results[4]}")
+    print(f"Testing        Loss: {test_results[0]:.3f}     TP: {test_results[1]}      FN: {test_results[2]}      TN: {test_results[3]}      FP: {test_results[4]}")
+    print(f"Total          Loss: {total_results[0]:.3f}     TP: {total_results[1]}     FN: {total_results[2]}     TN: {total_results[3]}     FP: {total_results[4]}")
+
+    # Calculate accuracy metrics
+    train_metrics, valid_metrics, test_metrics, total_metrics = calculate_metrics(train_results, valid_results, test_results, total_results)
+    print(f"Training       Accuracy: {train_metrics[0]:.3f}     Precision: {train_metrics[1]:.3f}     Recall: {train_metrics[2]:.3f}")
+    print(f"Validation     Accuracy: {valid_metrics[0]:.3f}     Precision: {valid_metrics[1]:.3f}     Recall: {valid_metrics[2]:.3f}")
+    print(f"Testing        Accuracy: {test_metrics[0]:.3f}     Precision: {test_metrics[1]:.3f}     Recall: {test_metrics[2]:.3f}")
+    print(f"Total          Accuracy: {total_metrics[0]:.3f}     Precision: {total_metrics[1]:.3f}     Recall: {total_metrics[2]:.3f}")
+
+    '''
+    # Create KML file to visualize the results
+    KML_file = 'kml_test.kml'
+    shape_file = 'shp_test.shp'
+    create_KML_and_Shapefile(KML_file, shape_file, tile_values, pos_tiles, neg_tiles)
+    '''
