@@ -18,6 +18,7 @@ from sklearn.metrics import confusion_matrix as CM
 import simplekml
 from sample_tiles import visualize_tile
 from sample_tiles import sample_tiles
+import shapefile
 
 # Structure to handle the dataset
 class TileDataset(Dataset):
