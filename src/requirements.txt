@@ -1,0 +1,7 @@
+geojson
+geopandas
+opencv-python
+rasterio
+simplekml
+torchvision
+transformers
